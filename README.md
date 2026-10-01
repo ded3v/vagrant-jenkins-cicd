@@ -1,4 +1,4 @@
-# Projeto Vagrant + Jenkins — Pipeline CI/CD com Deploy via SSH
+# Vagrant + Jenkins · Infraestrutura e entrega de uma API Node.js
 
 Projeto desenvolvido durante o Bootcamp DevOps da FAP, com o objetivo de provisionar duas máquinas virtuais utilizando Vagrant e implementar uma pipeline CI/CD com Jenkins para uma aplicação Node.js.
 
@@ -29,52 +29,28 @@ A VM Jenkins é responsável por obter o código do GitHub, instalar as dependê
 
 A VM Prod recebe os arquivos e disponibiliza a aplicação Node.js na porta 3000.
 
-### Fluxo da aplicação
+### Caminho da entrega
 
-```text
-GitHub
-   |
-   v
-VM Jenkins
-   |
-   |-- Install
-   |-- Build
-   |-- Test
-   |-- Deploy
-   |
-   | SSH + SCP
-   v
-VM Prod
-   |
-   v
-Aplicação Node.js
-   |
-   v
-Porta 3000
-```
+| Etapa | Onde acontece | Resultado |
+| --- | --- | --- |
+| Obter o código | Jenkins, a partir do SCM configurado | Workspace com o repositório |
+| Install, Build e Test | VM Jenkins | Dependências instaladas, build simulado e testes executados |
+| Deploy por SCP | Jenkins → VM Prod | Arquivos copiados para `/home/vagrant/app-prod/` |
+| Instalar e iniciar | VM Prod, manualmente | API disponível na porta 3000 |
+
+A transferência é automatizada; a instalação das dependências e a inicialização na Prod ainda exigem ação manual.
 
 ## 3. Estrutura do projeto
 
-```text
-projeto-vagrant-jenkins/
-|
-|-- app/
-|   |-- src/
-|   |-- test/
-|   |-- package.json
-|   |-- package-lock.json
-|   |-- server.js
-|
-|-- vagrant/
-|   |-- scripts/
-|       |-- setup-jenkins.sh
-|       |-- setup-prod.sh
-|
-|-- Jenkinsfile
-|-- Vagrantfile
-|-- .gitignore
-|-- README.md
-```
+| Caminho | Finalidade |
+| --- | --- |
+| `Vagrantfile` | Define as duas VMs e seus provisionadores |
+| `vagrant/scripts/setup-jenkins.sh` | Instala Java 21, Node.js 20 e Jenkins |
+| `vagrant/scripts/setup-prod.sh` | Instala Node.js 22 na Prod |
+| `Jenkinsfile` | Executa Install, Build, Test e transferência por SCP |
+| `app/src/` e `app/server.js` | Código e inicialização da API |
+| `app/test/` | Testes com Jest e Supertest |
+| `app/package.json` e `app/package-lock.json` | Scripts e dependências |
 
 O `Vagrantfile` define a configuração das duas máquinas virtuais.
 
@@ -87,6 +63,13 @@ O Vagrant foi utilizado para automatizar a criação e a configuração das máq
 O ambiente utiliza Ubuntu Server, com hostnames e endereços IP distintos para cada VM.
 
 ### Inicialização das máquinas
+
+Requisitos: Git, Vagrant, VirtualBox e virtualização habilitada no computador. São duas VMs de 1 GB cada; reserve recursos também para o sistema host.
+
+```bash
+git clone https://github.com/ded3v/vagrant-jenkins-cicd.git
+cd vagrant-jenkins-cicd
+```
 
 Na raiz do projeto, execute:
 
@@ -124,6 +107,19 @@ O script `setup-prod.sh` prepara o ambiente de produção, instalando o Node.js 
 
 Durante o desenvolvimento, o provisionamento foi atualizado para utilizar o Node.js 22, garantindo a compatibilidade com as dependências da aplicação.
 
+### Acesso ao Jenkins
+
+Abra [http://localhost:8050](http://localhost:8050) ou [http://192.168.56.10:8080](http://192.168.56.10:8080).
+
+Para obter a senha inicial:
+
+```bash
+vagrant ssh jenkins
+sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+```
+
+Conclua a configuração inicial e instale o plugin **SSH Agent**. Crie um job Pipeline com **Pipeline script from SCM**, a URL deste repositório, branch `*/main` e caminho `Jenkinsfile`.
+
 ## 5. Comunicação SSH entre as máquinas
 
 A autenticação SSH foi configurada para permitir que o Jenkins se conecte à VM Prod sem precisar informar a senha durante a execução da pipeline.
@@ -133,6 +129,17 @@ Foi utilizado um par de chaves SSH do tipo Ed25519.
 A chave pública foi autorizada na VM Prod, enquanto a chave privada foi cadastrada no Jenkins como uma credencial SSH.
 
 O ID da credencial utilizado na pipeline é `app`.
+
+### Preparação necessária para uma nova instalação
+
+O Vagrant instala os programas, mas não configura a credencial `app`, a autorização SSH nem o diretório de destino automaticamente.
+
+1. Crie um par de chaves para esse laboratório e autorize a chave pública em `/home/vagrant/.ssh/authorized_keys` na VM Prod.
+2. No Jenkins, cadastre a chave privada como **SSH Username with private key**, com usuário `vagrant` e ID `app`.
+3. Na Prod, crie `/home/vagrant/app-prod/` com propriedade do usuário `vagrant`.
+4. Para o usuário que executa o agente Jenkins, registre a chave do host Prod em `known_hosts`, conferindo sua impressão digital na própria VM.
+
+O teste SSH precisa usar a mesma identidade e credencial da pipeline. Uma conexão feita pelo usuário `vagrant` na VM Jenkins não comprova que o serviço Jenkins está configurado.
 
 ### Validação da conexão
 
@@ -274,3 +281,9 @@ Entre as melhorias previstas estão a instalação das dependências durante o d
 Também podemos implementar verificações de saúde da aplicação após o deploy e aprimorar o tratamento de falhas da pipeline.
 
 Essas melhorias permitirão evoluir o projeto para um fluxo de entrega contínua mais completo.
+
+## 11. Autoria e origem
+
+André Chagas Assis Costa e Pedro Delmiro — FAP DevOps, Turma 5.
+
+Projeto desenvolvido a partir de [carlhenriquex/projeto-vagrant-jenkins](https://github.com/carlhenriquex/projeto-vagrant-jenkins).
